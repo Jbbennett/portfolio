@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import './ThreatLensWorkbench.css'
 
 const detections = [
@@ -10,6 +10,28 @@ const detections = [
 
 const eventFormats = ['JSON', 'JSONL', 'CSV', 'Sysmon', 'Windows events']
 const reportFormats = ['JSON', 'CSV', 'HTML', 'Text']
+const pqcSchemes = [
+  {
+    id: 'frodo',
+    label: 'FrodoKEM',
+    name: 'FrodoKEM-976-SHAKE',
+    classification: 'Standard LWE · comparison baseline',
+    publicKey: '15,632 bytes',
+    privateKey: '31,296 bytes',
+    warmRun: '~20 ms average',
+    role: 'Benchmark baseline',
+  },
+  {
+    id: 'mlkem',
+    label: 'ML-KEM',
+    name: 'ML-KEM-768',
+    classification: 'Module-LWE · NIST FIPS 203',
+    publicKey: '1,184 bytes',
+    privateKey: '2,400 bytes',
+    warmRun: '~8 ms average',
+    role: 'Hybrid key establishment',
+  },
+]
 
 const projectFlows = {
   '01': [
@@ -32,32 +54,15 @@ const projectFlows = {
   ],
 }
 
-const simulatorModes = [
-  {
-    id: 'classical',
-    label: 'RSA / ECC',
-    sweepDurationMs: 2200,
-    strength: 'Quantum-vulnerable public-key assumptions',
-    resultTitle: 'Legacy path',
-    result: 'A sufficiently capable quantum computer could undermine RSA/ECC key establishment with Shor’s algorithm. This is a conditional risk, not a time-to-crack estimate.',
-  },
-  {
-    id: 'pqc',
-    label: 'Lattice-based PQC',
-    sweepDurationMs: 7000,
-    strength: 'Designed to resist known quantum attacks',
-    resultTitle: 'Post-quantum direction',
-    result: 'Designed to resist known quantum attacks. Security depends on assumptions and implementation; this is not a guarantee or a crack-time estimate.',
-  },
-]
-
 function ThreatLensWorkbench({ visible, projects }) {
   const [activeProjectNumber, setActiveProjectNumber] = useState('02')
   const [activeDetection, setActiveDetection] = useState(0)
+  const [activePqcSchemeId, setActivePqcSchemeId] = useState('mlkem')
   if (!visible || projects.length === 0) return null
 
   const selectedProject = projects.find((project) => project.number === activeProjectNumber) ?? projects[0]
   const selectedDetection = detections[activeDetection]
+  const selectedPqcScheme = pqcSchemes.find((scheme) => scheme.id === activePqcSchemeId)
   const isThreatLens = selectedProject.number === '02'
 
   return (
@@ -72,7 +77,7 @@ function ThreatLensWorkbench({ visible, projects }) {
       <div className="workbench">
         <div className="workbench-topbar">
           <span className="workbench-name"><i aria-hidden="true" />{selectedProject.title.toUpperCase()}</span>
-          <span className="workbench-disclaimer">Illustrative workflow · no live data</span>
+          <span className="workbench-disclaimer">{selectedProject.number === '01' ? 'Research snapshot · C++ benchmarks' : 'Illustrative workflow · no live data'}</span>
         </div>
         <div className="workbench-project-picker">
           <span className="workbench-label">Select project</span>
@@ -130,20 +135,39 @@ function ThreatLensWorkbench({ visible, projects }) {
           <div className={`project-preview-flow ${selectedProject.number === '01' ? 'pqc-project-preview' : ''}`}>
             {selectedProject.number !== '01' && <div className="project-preview-intro" aria-live="polite"><span className="workbench-label">{selectedProject.type}</span><h3>{selectedProject.title}</h3><p>{selectedProject.summary ?? selectedProject.description}</p>{selectedProject.links && <div className="project-links">{selectedProject.links.map((link) => <a href={link.url} key={link.url} target="_blank" rel="noreferrer">{link.label}<span aria-hidden="true">↗</span></a>)}</div>}</div>}
             {selectedProject.number === '01' ? (
-              <div className="pqc-briefing" aria-labelledby="pqc-briefing-title">
-                <div className="pqc-briefing-heading">
-                  <div>
-                    <span className="workbench-label">RSA / ECC vs lattice-based PQC</span>
-                    <h3 id="pqc-briefing-title">Why migrate before quantum scale?</h3>
+              <div className="workbench-layout pqc-workbench">
+                <div className="workbench-detections">
+                  <p className="workbench-label">Choose a KEM</p>
+                  <div className="detection-options" role="group" aria-label="Select a KEM scheme">
+                    {pqcSchemes.map((scheme, index) => (
+                      <button
+                        aria-pressed={activePqcSchemeId === scheme.id}
+                        className={`detection-option ${activePqcSchemeId === scheme.id ? 'active' : ''}`}
+                        key={scheme.id}
+                        onClick={() => setActivePqcSchemeId(scheme.id)}
+                        type="button"
+                      >
+                        <span className="detection-index">0{index + 1}</span>
+                        <span>{scheme.label}</span>
+                        <span className="detection-arrow" aria-hidden="true">↗</span>
+                      </button>
+                    ))}
                   </div>
-                  <p>PQC runs on classical computers. A sufficiently capable quantum computer could use Shor’s algorithm against RSA/ECC key-establishment assumptions.</p>
                 </div>
-                <div className="pqc-comparison">
-                  <article><h4>RSA / ECC</h4><p>Current public-key methods; vulnerable to Shor at quantum scale.</p></article>
-                  <article><h4>Lattice PQC</h4><p>Runs classically; designed to resist known quantum attacks.</p></article>
+                <div className="workbench-inspector">
+                  <div className="selected-signal" aria-live="polite" key={selectedPqcScheme.id}>
+                    <span className="workbench-label">Selected KEM</span>
+                    <h3>{selectedPqcScheme.name}</h3>
+                    <p>{selectedPqcScheme.classification}</p>
+                  </div>
+                  <ol className="workbench-pipeline">
+                    <li><span>01 / PUBLIC KEY</span><strong>{selectedPqcScheme.publicKey}</strong><small>Key size</small></li>
+                    <li><span>02 / PRIVATE KEY</span><strong>{selectedPqcScheme.privateKey}</strong><small>Key size</small></li>
+                    <li className={selectedPqcScheme.id === 'mlkem' ? 'pipeline-active' : ''}><span>03 / WARM RUN</span><strong>{selectedPqcScheme.warmRun}</strong><small>Our C++ tests</small></li>
+                    <li><span>04 / ROLE</span><strong>{selectedPqcScheme.role}</strong><small>Hybrid design</small></li>
+                  </ol>
+                  <p className="pqc-takeaway"><strong>Result:</strong> ML-KEM-768 was ~2.6× faster with ~13× smaller keys in our tests. It is selected for key establishment; AES-256-GCM handles bulk data.</p>
                 </div>
-                <p className="pqc-symmetric-note"><strong>Why now:</strong> Harvest-now/decrypt-later puts long-lived data at risk. AES faces a different, quadratic Grover speedup.</p>
-                <PqcScenarioSimulator />
               </div>
             ) : (
               <ol className="workbench-pipeline project-flow-pipeline">{projectFlows[selectedProject.number].map((step) => <li key={step.stage}><span>{step.stage}</span><strong>{step.title}</strong><small>{step.detail}</small></li>)}</ol>
@@ -152,80 +176,6 @@ function ThreatLensWorkbench({ visible, projects }) {
         )}
       </div>
     </section>
-  )
-}
-
-function PqcScenarioSimulator() {
-  const [activeModeId, setActiveModeId] = useState('classical')
-  const [isPlaying, setIsPlaying] = useState(true)
-  const [timelineProgress, setTimelineProgress] = useState(0)
-  const activeMode = simulatorModes.find((mode) => mode.id === activeModeId)
-
-  function togglePlayback() {
-    if (isPlaying) {
-      setIsPlaying(false)
-      setActiveModeId('classical')
-      setTimelineProgress(0)
-      return
-    }
-
-    setIsPlaying(true)
-  }
-
-  useEffect(() => {
-    if (!isPlaying) return undefined
-
-    const startedAt = performance.now()
-    const timer = window.setInterval(() => {
-      const progress = (performance.now() - startedAt) / activeMode.sweepDurationMs
-      if (progress >= 1) {
-        setTimelineProgress(0)
-        setActiveModeId((currentModeId) => {
-          const currentIndex = simulatorModes.findIndex((mode) => mode.id === currentModeId)
-          return simulatorModes[(currentIndex + 1) % simulatorModes.length].id
-        })
-        return
-      }
-      setTimelineProgress(progress * 100)
-    }, 50)
-
-    return () => window.clearInterval(timer)
-  }, [activeMode.sweepDurationMs, isPlaying])
-
-  return (
-    <div className={`pqc-simulator mode-${activeMode.id} ${isPlaying ? 'is-playing' : ''}`}>
-      <div className="pqc-simulator-heading">
-        <div>
-          <span className="workbench-label">Relative-resistance animation · illustrative, not crack time</span>
-          <h4>Compare quantum-risk paths</h4>
-        </div>
-        <button className="pqc-simulator-play" type="button" aria-pressed={isPlaying} onClick={togglePlayback}>{isPlaying ? 'Pause' : 'Play'}<span aria-hidden="true">{isPlaying ? 'Ⅱ' : '▶'}</span></button>
-      </div>
-      <div className="pqc-simulator-methods" role="group" aria-label="Select a key-establishment method">
-        {simulatorModes.map((mode) => (
-          <button aria-pressed={activeModeId === mode.id} className={`pqc-simulator-method ${activeModeId === mode.id ? 'active' : ''} ${mode.id === 'pqc' ? 'pqc-strength' : ''}`} key={mode.id} onClick={() => { setActiveModeId(mode.id); setIsPlaying(false); setTimelineProgress(0) }} type="button">
-            <span>{mode.label}</span><small>{mode.strength}</small>
-          </button>
-        ))}
-      </div>
-      <div className="pqc-risk-timeline" aria-label="Illustrative path from encryption today to a hypothetical future quantum-capable computer. Sweep speed shows relative resistance only, not real elapsed time.">
-        <div className="pqc-timeline-track" aria-hidden="true">
-          <span className="pqc-timeline-progress" style={{ width: `${timelineProgress}%` }} />
-          <i /><i /><i />
-          <span className="pqc-timeline-marker" style={{ left: `${timelineProgress}%` }} />
-        </div>
-        <div className="pqc-timeline-labels">
-          <div><strong>Today</strong><small>Key established</small></div>
-          <div><strong>Data retained</strong><small>Could be captured</small></div>
-          <div><strong>Quantum-capable future</strong><small>Hypothetical, no date</small></div>
-        </div>
-      </div>
-      <div className="pqc-simulator-result" aria-live="polite" key={activeMode.id}>
-        <strong>{activeMode.resultTitle}</strong>
-        <p>{activeMode.result}</p>
-      </div>
-      <p className="pqc-simulator-footnote">Faster sweep means less resistance in this illustrative comparison; it is not a predicted crack speed. Real attack timing depends on future hardware, parameters, protocol, and implementation.</p>
-    </div>
   )
 }
 
